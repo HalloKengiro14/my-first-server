@@ -1,20 +1,55 @@
-// 1. เรียกใชงาน Module ที่ชื่อวา 'http' ซึ่งเปนระบบพื้นฐานของ Node.js สําหรับทําเซิรฟเวอร
+// 1. เรียกใชงาน Module ที่ชื่อวา 'http' ซึ่งเปนระบบพื้นฐานของ Node.js สำหรับทำเซิร์ฟเวอร์
 const http = require('http');
 
-// 2. กําหนดชองทาง (Port) ที่เซิรฟเวอรจะใชสื่อสาร โดยใหใชของที่ Cloud กําหนด
+// 1.1 เรียกใช้งาน Pool จากไลบรารี pg สำหรับจัดการการเชื่อมต่อฐานข้อมูล
+const { Pool } = require('pg');
+
+// 2. กำหนดช่องทาง (Port) ที่เซิร์ฟเวอร์จะใช้สื่อสาร โดยให้ใช้ของที่ Cloud กำหนด
 const port = process.env.PORT || 3000;
 
-// 3. สรางเครื่องแมขาย (Server) ที่คอยรับคําขอ (req) และตอบกลับ (res)
-const server = http.createServer((req, res) => {
+// 2.1 ตั้งค่าการเชื่อมต่อ โดยดึง URL มาจาก Environment Variable ของ Railway
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+});
 
-// 3.1 ตั้งรหัสสถานะ 200 หมายถึง "ทํางานสําเร็จ (OK)"
+// 3. สร้างเครื่องแม่ขาย (Server) ที่คอยรับคำขอ (req) และตอบกลับ (res)
+const server = http.createServer(async (req, res) => {
+
+// 3.1 ตั้งรหัสสถานะ 200 หมายถึง "ทำงานสำเร็จ (OK)"
 res.statusCode = 200;
 
-// 3.2 บอกเบราวเซอรของผูใชวา สิ่งที่สงกลับไปคือไฟลขอความแบบ HTML แลดวยภาษาไทย
+// 3.2 บอกเบราวเซอร์ของผู้ใช้ว่า สิ่งที่ส่งกลับไปคือไฟล์ข้อความแบบ HTML และด้วยภาษาไทย
 res.setHeader('Content-Type', 'text/html; charset=utf-8');
 
-// 3.3 สงขอมูลหนาเว็บกลับไปหาผูใช (ปรับแก้ไข UI ให้สวยงาม)
-res.end(`
+try {
+  // 3.3 ขอเชื่อมต่อและส่งคำสั่ง SQL ไปดึงข้อมูลจากตาราง students
+  const client = await pool.connect();
+  const result = await client.query('SELECT * FROM students ORDER BY student_id');
+  client.release(); // คืนการเชื่อมต่อเมื่อใช้งานเสร็จ
+
+  // 3.4 นำข้อมูลที่ได้ (result.rows) มาประกอบเป็นตาราง HTML ภายใน UI ที่สวยงาม
+  let studentTableHTML = '';
+  
+  if (result.rows && result.rows.length > 0) {
+    result.rows.forEach((row, index) => {
+      studentTableHTML += `
+        <tr>
+          <td class="table-cell">${row.student_id || '-'}</td>
+          <td class="table-cell">${row.student_name || '-'}</td>
+          <td class="table-cell">${row.email || '-'}</td>
+        </tr>
+      `;
+    });
+  } else {
+    studentTableHTML = `
+      <tr>
+        <td colspan="3" class="table-cell" style="text-align: center; color: #999;">ไม่พบข้อมูลนักศึกษา</td>
+      </tr>
+    `;
+  }
+
+  // 3.5 ส่งข้อมูลหน้าเว็บกลับไปหาผู้ใช้
+  res.end(`
 <!DOCTYPE html>
 <html lang="th">
 <head>
@@ -36,8 +71,9 @@ res.end(`
             display: flex;
             justify-content: center;
             align-items: center;
-            overflow: hidden;
+            overflow: auto;
             position: relative;
+            padding: 20px;
         }
 
         /* Animated background elements */
@@ -98,10 +134,10 @@ res.end(`
             background: rgba(255, 255, 255, 0.95);
             backdrop-filter: blur(10px);
             border-radius: 30px;
-            padding: 70px 50px;
+            padding: 50px;
             box-shadow: 0 30px 100px rgba(0, 0, 0, 0.5), 0 0 80px rgba(233, 69, 96, 0.3);
             text-align: center;
-            max-width: 700px;
+            max-width: 1000px;
             position: relative;
             border: 2px solid rgba(233, 69, 96, 0.1);
             animation: slideIn 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -144,6 +180,16 @@ res.end(`
             -webkit-text-fill-color: transparent;
             background-clip: text;
             letter-spacing: -1px;
+        }
+
+        h2 {
+            color: #16213e;
+            font-size: 1.8em;
+            margin: 30px 0 20px 0;
+            font-weight: 700;
+            text-align: left;
+            border-bottom: 3px solid #e94560;
+            padding-bottom: 10px;
         }
 
         .subtitle {
@@ -217,6 +263,7 @@ res.end(`
             padding: 15px 40px;
             border-radius: 50px;
             margin-top: 30px;
+            margin-bottom: 40px;
             font-weight: 600;
             font-size: 1.1em;
             box-shadow: 0 10px 30px rgba(0, 212, 255, 0.3);
@@ -233,6 +280,57 @@ res.end(`
                 transform: scale(1.05);
                 box-shadow: 0 15px 40px rgba(0, 212, 255, 0.5);
             }
+        }
+
+        .table-container {
+            overflow-x: auto;
+            margin: 30px 0;
+            border-radius: 15px;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        .student-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+        }
+
+        .student-table thead {
+            background: linear-gradient(135deg, #e94560, #ff6b9d);
+            color: white;
+        }
+
+        .student-table th {
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-size: 0.9em;
+        }
+
+        .student-table tbody tr {
+            border-bottom: 1px solid #e0e0e0;
+            transition: background-color 0.3s ease;
+        }
+
+        .student-table tbody tr:hover {
+            background-color: #f5f5f5;
+        }
+
+        .table-cell {
+            padding: 12px 15px;
+            color: #333;
+        }
+
+        .record-count {
+            color: #16213e;
+            font-weight: 600;
+            margin-top: 15px;
+            padding: 10px 15px;
+            background: rgba(233, 69, 96, 0.1);
+            border-radius: 10px;
+            display: inline-block;
         }
 
         .decoration {
@@ -288,14 +386,17 @@ res.end(`
             box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
         }
 
-        @media (max-width: 600px) {
+        @media (max-width: 800px) {
             .container {
-                padding: 50px 30px;
-                margin: 20px;
+                padding: 40px 25px;
             }
 
             h1 {
                 font-size: 2.5em;
+            }
+
+            h2 {
+                font-size: 1.4em;
             }
 
             .info-grid {
@@ -305,6 +406,15 @@ res.end(`
             .emoji-animation {
                 font-size: 3em;
                 margin-right: 10px;
+            }
+
+            .student-table {
+                font-size: 0.9em;
+            }
+
+            .student-table th,
+            .table-cell {
+                padding: 10px;
             }
         }
     </style>
@@ -320,7 +430,7 @@ res.end(`
         <div class="header">
             <span class="emoji-animation">🚀</span>
             <h1>Server Online</h1>
-            <div class="subtitle">Web Server Gateway</div>
+            <div class="subtitle">Web Server Gateway + PostgreSQL Database</div>
         </div>
 
         <div class="info-grid">
@@ -339,12 +449,32 @@ res.end(`
             ✓ ระบบกำลังทำงานได้อย่างสมบูรณ์
         </div>
 
+        <h2>📚 ข้อมูลนักศึกษา</h2>
+        <div class="table-container">
+            <table class="student-table">
+                <thead>
+                    <tr>
+                        <th>รหัสนักศึกษา</th>
+                        <th>ชื่อ-นามสกุล</th>
+                        <th>อีเมล</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${studentTableHTML}
+                </tbody>
+            </table>
+        </div>
+        <div class="record-count">
+            📊 จำนวนนักศึกษาทั้งหมด: ${result.rows.length} คน
+        </div>
+
         <div class="tech-stack">
             <div class="tech-label">⚡ Tech Stack</div>
             <div class="tech-icons">
                 <div class="tech-icon" title="Node.js">📦</div>
                 <div class="tech-icon" title="HTTP">🌐</div>
                 <div class="tech-icon" title="JavaScript">💛</div>
+                <div class="tech-icon" title="PostgreSQL">🐘</div>
                 <div class="tech-icon" title="HTML5">🏗️</div>
                 <div class="tech-icon" title="CSS3">🎨</div>
             </div>
@@ -356,10 +486,82 @@ res.end(`
     </div>
 </body>
 </html>
-`);
+  `);
+
+} catch (err) {
+  // กรณีเชื่อมต่อไม่ได้หรือเขียนชื่อตารางผิด
+  console.error('Database Error:', err);
+  res.end(`
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Error</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;500;700;800&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Poppins', sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .error-container {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 50px;
+            border-radius: 30px;
+            text-align: center;
+            max-width: 600px;
+            box-shadow: 0 30px 100px rgba(0, 0, 0, 0.5);
+        }
+        h1 {
+            color: #e94560;
+            font-size: 2.5em;
+            margin: 20px 0;
+        }
+        p {
+            color: #333;
+            font-size: 1.1em;
+            line-height: 1.6;
+        }
+        .error-code {
+            background: #f0f0f0;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: left;
+            margin: 20px 0;
+            color: #666;
+            font-family: 'Courier New', monospace;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="error-container">
+        <h1>⚠️ เกิดข้อผิดพลาด</h1>
+        <p><strong>ไม่สามารถเชื่อมต่อฐานข้อมูลได้</strong></p>
+        <div class="error-code">
+            <strong>Error Message:</strong><br>
+            ${err.message}
+        </div>
+        <p style="color: #999; margin-top: 30px; font-size: 0.9em;">
+            โปรดตรวจสอบ:<br>
+            ✓ DATABASE_URL ในตัวแปร Environment<br>
+            ✓ ชื่อตารางและคอลัมน์ในฐานข้อมูล<br>
+            ✓ การเชื่อมต่อเครือข่าย
+        </p>
+    </div>
+</body>
+</html>
+  `);
+}
+
 });
 
-// 4. สั่งใหเซิรฟเวอรเริ่มตนเปดรับฟงการเชื่อมตอตาม Port ที่กําหนดไว
+// 4. สั่งให้เซิร์ฟเวอร์เริ่มต้นเปิดรับฟังการเชื่อมต่อตามพอร์ตที่กำหนดไว้
 server.listen(port, () => {
-console.log(`Server is running! เครื่องแม่ข่ายเปิดทํางานแล้วที่ช่องทาง: ${port}`);
+console.log(`🚀 Server is running! เครื่องแม่ข่ายเปิดทำงานแล้วที่ช่องทาง: ${port}`);
+console.log(`📊 Connected to PostgreSQL Database`);
 });
