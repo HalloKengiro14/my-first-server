@@ -361,5 +361,5 @@ res.end(`
 
 // 4. สั่งใหเซิรฟเวอรเริ่มตนเปดรับฟงการเชื่อมตอตาม Port ที่กําหนดไว
 server.listen(port, () => {
-console.log(\`Server is running! เครื่องแม่ข่ายเปิดทํางานแล้วที่ช่องทาง: \${port}\`);
+console.log(`Server is running! เครื่องแม่ข่ายเปิดทํางานแล้วที่ช่องทาง: ${port}`);
 });
