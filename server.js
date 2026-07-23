@@ -1,23 +1,36 @@
-// 1. เรียกใช้งาน Module ที่ชื่อว่า 'http' ซึ่งเป็นระบบพื้นฐานของ Node.js สำหรับทำเซิร์ฟเวอร์
 const http = require('http');
-
-// 2. กำหนดช่องทาง (Port) ที่เซิร์ฟเวอร์จะใช้สื่อสาร โดยให้ใช้ของที่ Cloud กำหนดมา (process.env.PORT) ถ้าไม่มีให้ใช้ 3000
-const port = process.env.PORT || 3000;
-
-// 3. สร้างเครื่องแม่ข่าย (Server) ที่คอยรับคำขอ (req) และตอบกลับ (res)
-const server = http.createServer((req, res) => {
-
-    // 3.1 ตั้งรหัสสถานะ 200 หมายถึง "ทำงานสำเร็จ (OK)"
-    res.statusCode = 200;
-
-    // 3.2 บอกเบราว์เซอร์ของผู้ใช้ว่า สิ่งที่ส่งกลับไปคือไฟล์ข้อความแบบ HTML และรองรับภาษาไทย (utf-8)
-    res.setHeader('Content-Type', 'text/html; charset=utf-8');
-
-    // 3.3 ส่งข้อมูลหน้าเว็บกลับไปหาผู้ใช้ (*** ให้นักศึกษาแก้ชื่อ-นามสกุลตรงนี้ ***)
-    res.end('<h1>สวัสดีครับ! นี่คือ Web Server ของ นายรพีพัทธ์ เจริญรัฐวุฒิกุล</h1><p>เครื่องแม่ข่ายทำงานปกติบนระบบ Railway แล้วครับผม!</p>');
+// 1. เรียกใชงาน Pool จากไลบรารี pg สําหรับจัดการการเชื่อมตอฐานขอมูล
+const { Pool } = require('pg');
+// 2. ตั้งคาการเชื่อมตอ โดยดึง URL มาจาก Environment Variable ของ Railway
+const pool = new Pool({
+connectionString: process.env.DATABASE_URL,
 });
+const port = process.env.PORT || 3000;
+const server = http.createServer(async (req, res) => {
+res.statusCode = 200;
+res.setHeader('Content-Type', 'text/html; charset=utf-8');
 
-// 4. สั่งให้เซิร์ฟเวอร์เริ่มต้นเปิดรับฟังการเชื่อมต่อตาม Port ที่กำหนดไว้
+try {
+// 3. ขอเชื่อมตอและสงคําสั่ง SQL ไปดึงขอมูลจากตาราง students
+const client = await pool.connect();
+const result = await client.query('SELECT * FROM students');
+client.release(); // คนืการเชื่อมตอเมื่อใชงานเสร็จ
+// 4. นําขอมูลที่ได(result.rows) มาประกอบเปนตาราง HTML
+let html = `<h1>ฐานข้อมูลนักศึกษา (ทดสอบการเชื่อมต่อ)</h1>`;
+html += `<table border="1" cellpadding="10">`;
+html += `<tr><th>123456789</th><th>นายรพีพัทธ์ เจริญรัฐวุฒิกุล</th></tr>`;
+// วนลูปนําขอมูลแตละแถวมาแสดง
+result.rows.forEach(row => {
+html += `<tr><td>${row.student_id}</td><td>${row.student_name}</td></tr>`;
+});
+html += `</table>`;
+res.end(html);
+} catch (err) {
+// กรณเีชื่อมตอไมไดหรือเขียนชื่อตารางผิด
+console.error(err);
+res.end(`<h1>เกิดข้อผิดพลาด!</h1><p>${err.message}</p>`);
+}
+});
 server.listen(port, () => {
-    console.log(`Server is running! เครื่องแม่ข่ายเปิดทำงานแล้วที่ช่องทาง: ${port}`);
+console.log(`Server is running on port: ${port}`);
 });
